@@ -1,0 +1,45 @@
+{
+  "annotations": {
+    "title": "Update discussion"
+  },
+  "description": "Update a discussion (title/body/category) in a repository.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "string",
+        "description": "New discussion body (optional)"
+      },
+      "category_id": {
+        "type": "string",
+        "description": "New discussion category node ID (optional). If provided, this is used directly."
+      },
+      "category_name": {
+        "type": "string",
+        "description": "New discussion category name (optional). If provided, it will be resolved to a category ID."
+      },
+      "discussionNumber": {
+        "type": "number",
+        "description": "Discussion Number"
+      },
+      "owner": {
+        "type": "string",
+        "description": "Repository owner"
+      },
+      "repo": {
+        "type": "string",
+        "description": "Repository name"
+      },
+      "title": {
+        "type": "string",
+        "description": "New discussion title (optional)"
+      }
+    },
+    "required": [
+      "owner",
+      "repo",
+      "discussionNumber"
+    ]
+  },
+  "name": "update_discussion"
+}
