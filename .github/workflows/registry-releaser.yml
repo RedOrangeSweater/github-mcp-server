@@ -11,6 +11,7 @@ jobs:
     permissions:
       id-token: write  # Required for OIDC authentication
       contents: read
+      packages: read
 
     steps:
       - name: Checkout code
@@ -20,7 +21,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "stable"
-        
+
       - name: Fetch tags
         run: |
           if [[ "${{ github.ref_type }}" != "tag" ]]; then
@@ -29,6 +30,13 @@ jobs:
             echo "Skipping tag fetch - already on tag ${{ github.ref_name }}"
           fi
 
+      - name: Log into GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Wait for Docker image
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
@@ -36,14 +44,16 @@ jobs:
           else
             TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
           fi
-          IMAGE="ghcr.io/github/github-mcp-server:$TAG"
-          
+
+          REPO="${GITHUB_REPOSITORY,,}"
+          IMAGE="ghcr.io/${REPO}:$TAG"
+
           for i in {1..10}; do
             if docker manifest inspect "$IMAGE" &>/dev/null; then
-              echo "✅ Docker image ready: $TAG"
+              echo "✅ Docker image ready: $IMAGE"
               break
             fi
-            [ $i -eq 10 ] && { echo "❌ Timeout waiting for $TAG after 5 minutes"; exit 1; }
+            [ $i -eq 10 ] && { echo "❌ Timeout waiting for $IMAGE after 5 minutes"; exit 1; }
             echo "⏳ Waiting for Docker image ($i/10)..."
             sleep 30
           done
