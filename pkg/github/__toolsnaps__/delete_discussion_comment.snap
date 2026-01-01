@@ -1,0 +1,19 @@
+{
+  "annotations": {
+    "title": "Delete discussion comment"
+  },
+  "description": "Delete an existing discussion comment.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "comment_id": {
+        "type": "string",
+        "description": "Discussion comment node ID"
+      }
+    },
+    "required": [
+      "comment_id"
+    ]
+  },
+  "name": "delete_discussion_comment"
+}

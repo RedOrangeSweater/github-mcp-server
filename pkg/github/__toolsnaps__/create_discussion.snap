@@ -1,0 +1,42 @@
+{
+  "annotations": {
+    "title": "Create discussion"
+  },
+  "description": "Create a new discussion in a repository.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "string",
+        "description": "Discussion body (Markdown)"
+      },
+      "category_id": {
+        "type": "string",
+        "description": "Discussion category node ID. If provided, this is used directly."
+      },
+      "category_name": {
+        "type": "string",
+        "description": "Discussion category name. If provided, it will be resolved to a category ID."
+      },
+      "owner": {
+        "type": "string",
+        "description": "Repository owner"
+      },
+      "repo": {
+        "type": "string",
+        "description": "Repository name"
+      },
+      "title": {
+        "type": "string",
+        "description": "Discussion title"
+      }
+    },
+    "required": [
+      "owner",
+      "repo",
+      "title",
+      "body"
+    ]
+  },
+  "name": "create_discussion"
+}

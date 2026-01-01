@@ -1,0 +1,24 @@
+{
+  "annotations": {
+    "title": "Update discussion comment"
+  },
+  "description": "Update an existing discussion comment.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "string",
+        "description": "New comment body (Markdown)"
+      },
+      "comment_id": {
+        "type": "string",
+        "description": "Discussion comment node ID"
+      }
+    },
+    "required": [
+      "comment_id",
+      "body"
+    ]
+  },
+  "name": "update_discussion_comment"
+}

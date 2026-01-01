@@ -16,11 +16,11 @@ on:
     branches: ["main", "next"]
   workflow_dispatch:
     inputs:
-        description:
-          required: false
-          description: "Description of the run."
-          type: string
-          default: "Manual run"
+      description:
+        required: false
+        description: "Description of the run."
+        type: string
+        default: "Manual run"
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -112,6 +112,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
@@ -127,4 +128,3 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
-        

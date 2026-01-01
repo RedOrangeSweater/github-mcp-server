@@ -606,7 +606,7 @@ func Test_GetDiscussionComments(t *testing.T) {
 	assert.ElementsMatch(t, schema.Required, []string{"owner", "repo", "discussionNumber"})
 
 	// Use exact string query that matches implementation output
-	qGetComments := "query($after:String$discussionNumber:Int!$first:Int!$owner:String!$repo:String!){repository(owner: $owner, name: $repo){discussion(number: $discussionNumber){comments(first: $first, after: $after){nodes{body},pageInfo{hasNextPage,hasPreviousPage,startCursor,endCursor},totalCount}}}}"
+	qGetComments := "query($after:String$discussionNumber:Int!$first:Int!$owner:String!$repo:String!){repository(owner: $owner, name: $repo){discussion(number: $discussionNumber){comments(first: $first, after: $after){nodes{id,body,url},pageInfo{hasNextPage,hasPreviousPage,startCursor,endCursor},totalCount}}}}"
 
 	// Variables matching what GraphQL receives after JSON marshaling/unmarshaling
 	vars := map[string]interface{}{
@@ -622,8 +622,8 @@ func Test_GetDiscussionComments(t *testing.T) {
 			"discussion": map[string]any{
 				"comments": map[string]any{
 					"nodes": []map[string]any{
-						{"body": "This is the first comment"},
-						{"body": "This is the second comment"},
+						{"id": "DC_1", "body": "This is the first comment", "url": "https://github.com/owner/repo/discussions/1#discussioncomment-1"},
+						{"id": "DC_2", "body": "This is the second comment", "url": "https://github.com/owner/repo/discussions/1#discussioncomment-2"},
 					},
 					"pageInfo": map[string]any{
 						"hasNextPage":     false,
@@ -657,7 +657,11 @@ func Test_GetDiscussionComments(t *testing.T) {
 	// (Lines removed)
 
 	var response struct {
-		Comments []*github.IssueComment `json:"comments"`
+		Comments []struct {
+			ID   string `json:"id"`
+			Body string `json:"body"`
+			URL  string `json:"url"`
+		} `json:"comments"`
 		PageInfo struct {
 			HasNextPage     bool   `json:"hasNextPage"`
 			HasPreviousPage bool   `json:"hasPreviousPage"`
@@ -671,7 +675,9 @@ func Test_GetDiscussionComments(t *testing.T) {
 	assert.Len(t, response.Comments, 2)
 	expectedBodies := []string{"This is the first comment", "This is the second comment"}
 	for i, comment := range response.Comments {
-		assert.Equal(t, expectedBodies[i], *comment.Body)
+		assert.Equal(t, expectedBodies[i], comment.Body)
+		assert.NotEmpty(t, comment.ID)
+		assert.Contains(t, comment.URL, "https://github.com/")
 	}
 }
 
@@ -818,4 +824,432 @@ func Test_ListDiscussionCategories(t *testing.T) {
 			assert.Equal(t, tc.expectedCategories, response.Categories)
 		})
 	}
+}
+
+func Test_CreateDiscussion(t *testing.T) {
+	toolDef := CreateDiscussion(translations.NullTranslationHelper)
+	tool := toolDef.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "create_discussion", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "create_discussion tool should not be read-only")
+
+	schema, ok := tool.InputSchema.(*jsonschema.Schema)
+	require.True(t, ok, "InputSchema should be *jsonschema.Schema")
+	assert.Contains(t, schema.Properties, "owner")
+	assert.Contains(t, schema.Properties, "repo")
+	assert.Contains(t, schema.Properties, "title")
+	assert.Contains(t, schema.Properties, "body")
+	assert.Contains(t, schema.Properties, "category_id")
+	assert.Contains(t, schema.Properties, "category_name")
+	assert.ElementsMatch(t, schema.Required, []string{"owner", "repo", "title", "body"})
+
+	t.Run("create with category_id", func(t *testing.T) {
+		mockedClient := githubv4mock.NewMockedHTTPClient(
+			githubv4mock.NewQueryMatcher(
+				struct {
+					Repository struct {
+						ID githubv4.ID
+					} `graphql:"repository(owner: $owner, name: $repo)"`
+				}{},
+				map[string]any{
+					"owner": githubv4.String("owner"),
+					"repo":  githubv4.String("repo"),
+				},
+				githubv4mock.DataResponse(map[string]any{
+					"repository": map[string]any{
+						"id": githubv4.ID("repo-id"),
+					},
+				}),
+			),
+			githubv4mock.NewMutationMatcher(
+				struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID     githubv4.ID
+							Number githubv4.Int
+							URL    githubv4.String `graphql:"url"`
+						}
+					} `graphql:"createDiscussion(input: $input)"`
+				}{},
+				githubv4.CreateDiscussionInput{
+					RepositoryID: githubv4.ID("repo-id"),
+					Title:        githubv4.String("My title"),
+					Body:         githubv4.String("My body"),
+					CategoryID:   githubv4.ID("DIC_1"),
+				},
+				nil,
+				githubv4mock.DataResponse(map[string]any{
+					"createDiscussion": map[string]any{
+						"discussion": map[string]any{
+							"id":     githubv4.ID("DISC_1"),
+							"number": githubv4.Int(1),
+							"url":    githubv4.String("https://github.com/owner/repo/discussions/1"),
+						},
+					},
+				}),
+			),
+		)
+
+		deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+		handler := toolDef.Handler(deps)
+
+		req := createMCPRequest(map[string]any{
+			"owner":       "owner",
+			"repo":        "repo",
+			"title":       "My title",
+			"body":        "My body",
+			"category_id": "DIC_1",
+		})
+
+		res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+		require.NoError(t, err)
+		assert.False(t, res.IsError)
+
+		var out map[string]any
+		require.NoError(t, json.Unmarshal([]byte(getTextResult(t, res).Text), &out))
+		assert.Equal(t, "DISC_1", out["id"])
+		assert.Equal(t, float64(1), out["number"])
+		assert.Equal(t, "https://github.com/owner/repo/discussions/1", out["url"])
+	})
+
+	t.Run("create with category_name", func(t *testing.T) {
+		mockedClient := githubv4mock.NewMockedHTTPClient(
+			githubv4mock.NewQueryMatcher(
+				struct {
+					Repository struct {
+						ID githubv4.ID
+					} `graphql:"repository(owner: $owner, name: $repo)"`
+				}{},
+				map[string]any{
+					"owner": githubv4.String("owner"),
+					"repo":  githubv4.String("repo"),
+				},
+				githubv4mock.DataResponse(map[string]any{
+					"repository": map[string]any{
+						"id": githubv4.ID("repo-id"),
+					},
+				}),
+			),
+			githubv4mock.NewQueryMatcher(
+				struct {
+					Repository struct {
+						DiscussionCategories struct {
+							Nodes []struct {
+								ID   githubv4.ID
+								Name githubv4.String
+							}
+						} `graphql:"discussionCategories(first: $first)"`
+					} `graphql:"repository(owner: $owner, name: $repo)"`
+				}{},
+				map[string]any{
+					"owner": githubv4.String("owner"),
+					"repo":  githubv4.String("repo"),
+					"first": githubv4.Int(100),
+				},
+				githubv4mock.DataResponse(map[string]any{
+					"repository": map[string]any{
+						"discussionCategories": map[string]any{
+							"nodes": []map[string]any{
+								{"id": githubv4.ID("CAT_GENERAL"), "name": githubv4.String("General")},
+							},
+						},
+					},
+				}),
+			),
+			githubv4mock.NewMutationMatcher(
+				struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID     githubv4.ID
+							Number githubv4.Int
+							URL    githubv4.String `graphql:"url"`
+						}
+					} `graphql:"createDiscussion(input: $input)"`
+				}{},
+				githubv4.CreateDiscussionInput{
+					RepositoryID: githubv4.ID("repo-id"),
+					Title:        githubv4.String("My title"),
+					Body:         githubv4.String("My body"),
+					CategoryID:   githubv4.ID("CAT_GENERAL"),
+				},
+				nil,
+				githubv4mock.DataResponse(map[string]any{
+					"createDiscussion": map[string]any{
+						"discussion": map[string]any{
+							"id":     githubv4.ID("DISC_2"),
+							"number": githubv4.Int(2),
+							"url":    githubv4.String("https://github.com/owner/repo/discussions/2"),
+						},
+					},
+				}),
+			),
+		)
+
+		deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+		handler := toolDef.Handler(deps)
+
+		req := createMCPRequest(map[string]any{
+			"owner":         "owner",
+			"repo":          "repo",
+			"title":         "My title",
+			"body":          "My body",
+			"category_name": "General",
+		})
+
+		res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+		require.NoError(t, err)
+		assert.False(t, res.IsError)
+
+		var out map[string]any
+		require.NoError(t, json.Unmarshal([]byte(getTextResult(t, res).Text), &out))
+		assert.Equal(t, "DISC_2", out["id"])
+		assert.Equal(t, float64(2), out["number"])
+		assert.Equal(t, "https://github.com/owner/repo/discussions/2", out["url"])
+	})
+}
+
+func Test_UpdateDiscussion(t *testing.T) {
+	toolDef := UpdateDiscussion(translations.NullTranslationHelper)
+	tool := toolDef.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "update_discussion", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "update_discussion tool should not be read-only")
+
+	mockedClient := githubv4mock.NewMockedHTTPClient(
+		githubv4mock.NewQueryMatcher(
+			struct {
+				Repository struct {
+					Discussion struct {
+						ID githubv4.ID
+					} `graphql:"discussion(number: $discussionNumber)"`
+				} `graphql:"repository(owner: $owner, name: $repo)"`
+			}{},
+			map[string]any{
+				"owner":            githubv4.String("owner"),
+				"repo":             githubv4.String("repo"),
+				"discussionNumber": githubv4.Int(1),
+			},
+			githubv4mock.DataResponse(map[string]any{
+				"repository": map[string]any{
+					"discussion": map[string]any{
+						"id": githubv4.ID("DISC_ID"),
+					},
+				},
+			}),
+		),
+		githubv4mock.NewMutationMatcher(
+			struct {
+				UpdateDiscussion struct {
+					Discussion struct {
+						ID     githubv4.ID
+						Number githubv4.Int
+						URL    githubv4.String `graphql:"url"`
+					}
+				} `graphql:"updateDiscussion(input: $input)"`
+			}{},
+			githubv4.UpdateDiscussionInput{
+				DiscussionID: githubv4.ID("DISC_ID"),
+				Title:        func() *githubv4.String { s := githubv4.String("New title"); return &s }(),
+			},
+			nil,
+			githubv4mock.DataResponse(map[string]any{
+				"updateDiscussion": map[string]any{
+					"discussion": map[string]any{
+						"id":     githubv4.ID("DISC_ID"),
+						"number": githubv4.Int(1),
+						"url":    githubv4.String("https://github.com/owner/repo/discussions/1"),
+					},
+				},
+			}),
+		),
+	)
+
+	deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+	handler := toolDef.Handler(deps)
+
+	req := createMCPRequest(map[string]any{
+		"owner":            "owner",
+		"repo":             "repo",
+		"discussionNumber": int32(1),
+		"title":            "New title",
+	})
+	res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+
+	var out map[string]any
+	require.NoError(t, json.Unmarshal([]byte(getTextResult(t, res).Text), &out))
+	assert.Equal(t, "DISC_ID", out["id"])
+	assert.Equal(t, float64(1), out["number"])
+	assert.Equal(t, "https://github.com/owner/repo/discussions/1", out["url"])
+}
+
+func Test_AddDiscussionComment(t *testing.T) {
+	toolDef := AddDiscussionComment(translations.NullTranslationHelper)
+	tool := toolDef.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "add_discussion_comment", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "add_discussion_comment tool should not be read-only")
+
+	mockedClient := githubv4mock.NewMockedHTTPClient(
+		githubv4mock.NewQueryMatcher(
+			struct {
+				Repository struct {
+					Discussion struct {
+						ID githubv4.ID
+					} `graphql:"discussion(number: $discussionNumber)"`
+				} `graphql:"repository(owner: $owner, name: $repo)"`
+			}{},
+			map[string]any{
+				"owner":            githubv4.String("owner"),
+				"repo":             githubv4.String("repo"),
+				"discussionNumber": githubv4.Int(1),
+			},
+			githubv4mock.DataResponse(map[string]any{
+				"repository": map[string]any{
+					"discussion": map[string]any{
+						"id": githubv4.ID("DISC_ID"),
+					},
+				},
+			}),
+		),
+		githubv4mock.NewMutationMatcher(
+			struct {
+				AddDiscussionComment struct {
+					Comment struct {
+						ID  githubv4.ID
+						URL githubv4.String `graphql:"url"`
+					}
+				} `graphql:"addDiscussionComment(input: $input)"`
+			}{},
+			githubv4.AddDiscussionCommentInput{
+				DiscussionID: githubv4.ID("DISC_ID"),
+				Body:         githubv4.String("Hello"),
+			},
+			nil,
+			githubv4mock.DataResponse(map[string]any{
+				"addDiscussionComment": map[string]any{
+					"comment": map[string]any{
+						"id":  githubv4.ID("DC_1"),
+						"url": githubv4.String("https://github.com/owner/repo/discussions/1#discussioncomment-1"),
+					},
+				},
+			}),
+		),
+	)
+
+	deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+	handler := toolDef.Handler(deps)
+
+	req := createMCPRequest(map[string]any{
+		"owner":            "owner",
+		"repo":             "repo",
+		"discussionNumber": int32(1),
+		"body":             "Hello",
+	})
+	res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+
+	var out map[string]any
+	require.NoError(t, json.Unmarshal([]byte(getTextResult(t, res).Text), &out))
+	assert.Equal(t, "DC_1", out["id"])
+	assert.Equal(t, "https://github.com/owner/repo/discussions/1#discussioncomment-1", out["url"])
+}
+
+func Test_UpdateDiscussionComment(t *testing.T) {
+	toolDef := UpdateDiscussionComment(translations.NullTranslationHelper)
+	tool := toolDef.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "update_discussion_comment", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "update_discussion_comment tool should not be read-only")
+
+	mockedClient := githubv4mock.NewMockedHTTPClient(
+		githubv4mock.NewMutationMatcher(
+			struct {
+				UpdateDiscussionComment struct {
+					Comment struct {
+						ID  githubv4.ID
+						URL githubv4.String `graphql:"url"`
+					}
+				} `graphql:"updateDiscussionComment(input: $input)"`
+			}{},
+			githubv4.UpdateDiscussionCommentInput{
+				CommentID: githubv4.ID("DC_1"),
+				Body:      githubv4.String("Updated"),
+			},
+			nil,
+			githubv4mock.DataResponse(map[string]any{
+				"updateDiscussionComment": map[string]any{
+					"comment": map[string]any{
+						"id":  githubv4.ID("DC_1"),
+						"url": githubv4.String("https://github.com/owner/repo/discussions/1#discussioncomment-1"),
+					},
+				},
+			}),
+		),
+	)
+
+	deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+	handler := toolDef.Handler(deps)
+
+	req := createMCPRequest(map[string]any{
+		"comment_id": "DC_1",
+		"body":       "Updated",
+	})
+	res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+
+	var out map[string]any
+	require.NoError(t, json.Unmarshal([]byte(getTextResult(t, res).Text), &out))
+	assert.Equal(t, "DC_1", out["id"])
+}
+
+func Test_DeleteDiscussionComment(t *testing.T) {
+	toolDef := DeleteDiscussionComment(translations.NullTranslationHelper)
+	tool := toolDef.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "delete_discussion_comment", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "delete_discussion_comment tool should not be read-only")
+
+	mockedClient := githubv4mock.NewMockedHTTPClient(
+		githubv4mock.NewMutationMatcher(
+			struct {
+				DeleteDiscussionComment struct {
+					ClientMutationID githubv4.String
+				} `graphql:"deleteDiscussionComment(input: $input)"`
+			}{},
+			githubv4.DeleteDiscussionCommentInput{
+				ID: githubv4.ID("DC_1"),
+			},
+			nil,
+			githubv4mock.DataResponse(map[string]any{
+				"deleteDiscussionComment": map[string]any{
+					"clientMutationId": githubv4.String("mut"),
+				},
+			}),
+		),
+	)
+
+	deps := BaseDeps{GQLClient: githubv4.NewClient(mockedClient)}
+	handler := toolDef.Handler(deps)
+
+	req := createMCPRequest(map[string]any{
+		"comment_id": "DC_1",
+	})
+	res, err := handler(ContextWithDeps(context.Background(), deps), &req)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, "discussion comment deleted successfully", getTextResult(t, res).Text)
 }
