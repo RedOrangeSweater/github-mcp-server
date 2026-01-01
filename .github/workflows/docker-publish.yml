@@ -9,11 +9,11 @@ on:
   schedule:
     - cron: "27 0 * * *"
   push:
-    branches: ["main", "next"]
+    branches: ["main", "next", "feat/discussions-write-tools"]
     # Publish semver tags as releases.
     tags: ["v*.*.*"]
   pull_request:
-    branches: ["main", "next"]
+    branches: ["main", "next", "feat/discussions-write-tools"]
   workflow_dispatch:
     inputs:
         description:
