@@ -9,18 +9,18 @@ on:
   schedule:
     - cron: "27 0 * * *"
   push:
-    branches: ["main", "next", "feat/discussions-write-tools"]
+    branches: ["main", "next"]
     # Publish semver tags as releases.
     tags: ["v*.*.*"]
   pull_request:
-    branches: ["main", "next", "feat/discussions-write-tools"]
+    branches: ["main", "next"]
   workflow_dispatch:
     inputs:
-        description:
-          required: false
-          description: "Description of the run."
-          type: string
-          default: "Manual run"
+      description:
+        required: false
+        description: "Description of the run."
+        type: string
+        default: "Manual run"
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -128,4 +128,3 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
-        
