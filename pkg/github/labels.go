@@ -121,7 +121,7 @@ func ListLabels(t translations.TranslationHelperFunc) inventory.ServerTool {
 	return NewTool(
 		ToolsetLabels,
 		mcp.Tool{
-			Name:        "list_label",
+			Name:        "list_labels",
 			Description: t("TOOL_LIST_LABEL_DESCRIPTION", "List labels from a repository"),
 			Annotations: &mcp.ToolAnnotations{
 				Title:        t("TOOL_LIST_LABEL_DESCRIPTION", "List labels from a repository."),
@@ -202,6 +202,278 @@ func ListLabels(t translations.TranslationHelperFunc) inventory.ServerTool {
 			}
 
 			return utils.NewToolResultText(string(out)), nil, nil
+		},
+	)
+}
+
+// CreateLabel creates a new label in a repository
+func CreateLabel(t translations.TranslationHelperFunc) inventory.ServerTool {
+	return NewTool(
+		ToolsetLabels,
+		mcp.Tool{
+			Name:        "create_label",
+			Description: t("TOOL_CREATE_LABEL_DESCRIPTION", "Create a label in a repository."),
+			Annotations: &mcp.ToolAnnotations{
+				Title:        t("TOOL_CREATE_LABEL_TITLE", "Create a label in a repository."),
+				ReadOnlyHint: false,
+			},
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"owner": {
+						Type:        "string",
+						Description: "Repository owner (username or organization name)",
+					},
+					"repo": {
+						Type:        "string",
+						Description: "Repository name",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Label name.",
+					},
+					"color": {
+						Type:        "string",
+						Description: "Label color as 6-character hex code without '#' prefix (e.g., 'f29513').",
+					},
+					"description": {
+						Type:        "string",
+						Description: "Label description text (optional).",
+					},
+				},
+				Required: []string{"owner", "repo", "name", "color"},
+			},
+		},
+		func(ctx context.Context, deps ToolDependencies, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+			owner, err := RequiredParam[string](args, "owner")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			repo, err := RequiredParam[string](args, "repo")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			name, err := RequiredParam[string](args, "name")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			color, err := RequiredParam[string](args, "color")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			description, _ := OptionalParam[string](args, "description")
+
+			client, err := deps.GetGQLClient(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			repoID, err := getRepositoryID(ctx, client, owner, repo)
+			if err != nil {
+				return ghErrors.NewGitHubGraphQLErrorResponse(ctx, "Failed to find repository", err), nil, nil
+			}
+
+			input := githubv4.CreateLabelInput{
+				RepositoryID: repoID,
+				Name:         githubv4.String(name),
+				Color:        githubv4.String(color),
+			}
+			if description != "" {
+				d := githubv4.String(description)
+				input.Description = &d
+			}
+
+			var mutation struct {
+				CreateLabel struct {
+					Label struct {
+						Name githubv4.String
+						ID   githubv4.ID
+					}
+				} `graphql:"createLabel(input: $input)"`
+			}
+
+			if err := client.Mutate(ctx, &mutation, input, nil); err != nil {
+				return ghErrors.NewGitHubGraphQLErrorResponse(ctx, "Failed to create label", err), nil, nil
+			}
+
+			return utils.NewToolResultText(fmt.Sprintf("label '%s' created successfully", mutation.CreateLabel.Label.Name)), nil, nil
+		},
+	)
+}
+
+// UpdateLabel updates an existing label in a repository
+func UpdateLabel(t translations.TranslationHelperFunc) inventory.ServerTool {
+	return NewTool(
+		ToolsetLabels,
+		mcp.Tool{
+			Name:        "update_label",
+			Description: t("TOOL_UPDATE_LABEL_DESCRIPTION", "Update a label in a repository."),
+			Annotations: &mcp.ToolAnnotations{
+				Title:        t("TOOL_UPDATE_LABEL_TITLE", "Update a label in a repository."),
+				ReadOnlyHint: false,
+			},
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"owner": {
+						Type:        "string",
+						Description: "Repository owner (username or organization name)",
+					},
+					"repo": {
+						Type:        "string",
+						Description: "Repository name",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Label name to update.",
+					},
+					"new_name": {
+						Type:        "string",
+						Description: "New name for the label (optional).",
+					},
+					"color": {
+						Type:        "string",
+						Description: "Label color as 6-character hex code without '#' prefix (optional).",
+					},
+					"description": {
+						Type:        "string",
+						Description: "Label description text (optional).",
+					},
+				},
+				Required: []string{"owner", "repo", "name"},
+			},
+		},
+		func(ctx context.Context, deps ToolDependencies, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+			owner, err := RequiredParam[string](args, "owner")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			repo, err := RequiredParam[string](args, "repo")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			name, err := RequiredParam[string](args, "name")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+
+			newName, _ := OptionalParam[string](args, "new_name")
+			color, _ := OptionalParam[string](args, "color")
+			description, _ := OptionalParam[string](args, "description")
+
+			if newName == "" && color == "" && description == "" {
+				return utils.NewToolResultError("at least one of new_name, color, or description must be provided for update"), nil, nil
+			}
+
+			client, err := deps.GetGQLClient(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			labelID, err := getLabelID(ctx, client, owner, repo, name)
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+
+			input := githubv4.UpdateLabelInput{ID: labelID}
+			if newName != "" {
+				n := githubv4.String(newName)
+				input.Name = &n
+			}
+			if color != "" {
+				c := githubv4.String(color)
+				input.Color = &c
+			}
+			if description != "" {
+				d := githubv4.String(description)
+				input.Description = &d
+			}
+
+			var mutation struct {
+				UpdateLabel struct {
+					Label struct {
+						Name githubv4.String
+						ID   githubv4.ID
+					}
+				} `graphql:"updateLabel(input: $input)"`
+			}
+
+			if err := client.Mutate(ctx, &mutation, input, nil); err != nil {
+				return ghErrors.NewGitHubGraphQLErrorResponse(ctx, "Failed to update label", err), nil, nil
+			}
+
+			return utils.NewToolResultText(fmt.Sprintf("label '%s' updated successfully", mutation.UpdateLabel.Label.Name)), nil, nil
+		},
+	)
+}
+
+// DeleteLabel deletes a label from a repository
+func DeleteLabel(t translations.TranslationHelperFunc) inventory.ServerTool {
+	return NewTool(
+		ToolsetLabels,
+		mcp.Tool{
+			Name:        "delete_label",
+			Description: t("TOOL_DELETE_LABEL_DESCRIPTION", "Delete a label from a repository."),
+			Annotations: &mcp.ToolAnnotations{
+				Title:           t("TOOL_DELETE_LABEL_TITLE", "Delete a label from a repository."),
+				ReadOnlyHint:    false,
+				DestructiveHint: ToBoolPtr(true),
+			},
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"owner": {
+						Type:        "string",
+						Description: "Repository owner (username or organization name)",
+					},
+					"repo": {
+						Type:        "string",
+						Description: "Repository name",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Label name to delete.",
+					},
+				},
+				Required: []string{"owner", "repo", "name"},
+			},
+		},
+		func(ctx context.Context, deps ToolDependencies, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+			owner, err := RequiredParam[string](args, "owner")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			repo, err := RequiredParam[string](args, "repo")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+			name, err := RequiredParam[string](args, "name")
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+
+			client, err := deps.GetGQLClient(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			labelID, err := getLabelID(ctx, client, owner, repo, name)
+			if err != nil {
+				return utils.NewToolResultError(err.Error()), nil, nil
+			}
+
+			input := githubv4.DeleteLabelInput{ID: labelID}
+			var mutation struct {
+				DeleteLabel struct {
+					ClientMutationID githubv4.String
+				} `graphql:"deleteLabel(input: $input)"`
+			}
+
+			if err := client.Mutate(ctx, &mutation, input, nil); err != nil {
+				return ghErrors.NewGitHubGraphQLErrorResponse(ctx, "Failed to delete label", err), nil, nil
+			}
+
+			return utils.NewToolResultText(fmt.Sprintf("label '%s' deleted successfully", name)), nil, nil
 		},
 	)
 }

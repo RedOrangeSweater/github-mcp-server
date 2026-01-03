@@ -288,6 +288,9 @@ func AllTools(t translations.TranslationHelperFunc) []inventory.ServerTool {
 		GetLabel(t),
 		GetLabelForLabelsToolset(t),
 		ListLabels(t),
+		CreateLabel(t),
+		UpdateLabel(t),
+		DeleteLabel(t),
 		LabelWrite(t),
 	}
 }

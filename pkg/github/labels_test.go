@@ -146,9 +146,9 @@ func TestListLabels(t *testing.T) {
 	tool := serverTool.Tool
 	require.NoError(t, toolsnaps.Test(tool.Name, tool))
 
-	assert.Equal(t, "list_label", tool.Name)
+	assert.Equal(t, "list_labels", tool.Name)
 	assert.NotEmpty(t, tool.Description)
-	assert.True(t, tool.Annotations.ReadOnlyHint, "list_label tool should be read-only")
+	assert.True(t, tool.Annotations.ReadOnlyHint, "list_labels tool should be read-only")
 
 	tests := []struct {
 		name               string
@@ -201,6 +201,336 @@ func TestListLabels(t *testing.T) {
 								},
 								"totalCount": githubv4.Int(2),
 							},
+						},
+					}),
+				),
+			),
+			expectToolError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := githubv4.NewClient(tc.mockedClient)
+			deps := BaseDeps{
+				GQLClient: client,
+			}
+			handler := serverTool.Handler(deps)
+
+			request := createMCPRequest(tc.requestArgs)
+			result, err := handler(ContextWithDeps(context.Background(), deps), &request)
+
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+
+			if tc.expectToolError {
+				assert.True(t, result.IsError)
+				if tc.expectedToolErrMsg != "" {
+					textContent := getErrorResult(t, result)
+					assert.Contains(t, textContent.Text, tc.expectedToolErrMsg)
+				}
+			} else {
+				assert.False(t, result.IsError)
+			}
+		})
+	}
+}
+
+func TestCreateLabel(t *testing.T) {
+	t.Parallel()
+
+	// Verify tool definition
+	serverTool := CreateLabel(translations.NullTranslationHelper)
+	tool := serverTool.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "create_label", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "create_label tool should not be read-only")
+
+	tests := []struct {
+		name               string
+		requestArgs        map[string]any
+		mockedClient       *http.Client
+		expectToolError    bool
+		expectedToolErrMsg string
+	}{
+		{
+			name: "successful label creation",
+			requestArgs: map[string]any{
+				"owner":       "owner",
+				"repo":        "repo",
+				"name":        "new-label",
+				"color":       "f29513",
+				"description": "A new test label",
+			},
+			mockedClient: githubv4mock.NewMockedHTTPClient(
+				githubv4mock.NewQueryMatcher(
+					struct {
+						Repository struct {
+							ID githubv4.ID
+						} `graphql:"repository(owner: $owner, name: $repo)"`
+					}{},
+					map[string]any{
+						"owner": githubv4.String("owner"),
+						"repo":  githubv4.String("repo"),
+					},
+					githubv4mock.DataResponse(map[string]any{
+						"repository": map[string]any{
+							"id": githubv4.ID("test-repo-id"),
+						},
+					}),
+				),
+				githubv4mock.NewMutationMatcher(
+					struct {
+						CreateLabel struct {
+							Label struct {
+								Name githubv4.String
+								ID   githubv4.ID
+							}
+						} `graphql:"createLabel(input: $input)"`
+					}{},
+					githubv4.CreateLabelInput{
+						RepositoryID: githubv4.ID("test-repo-id"),
+						Name:         githubv4.String("new-label"),
+						Color:        githubv4.String("f29513"),
+						Description:  func() *githubv4.String { s := githubv4.String("A new test label"); return &s }(),
+					},
+					nil,
+					githubv4mock.DataResponse(map[string]any{
+						"createLabel": map[string]any{
+							"label": map[string]any{
+								"id":   githubv4.ID("new-label-id"),
+								"name": githubv4.String("new-label"),
+							},
+						},
+					}),
+				),
+			),
+			expectToolError: false,
+		},
+		{
+			name: "create label without color",
+			requestArgs: map[string]any{
+				"owner": "owner",
+				"repo":  "repo",
+				"name":  "new-label",
+			},
+			mockedClient:       githubv4mock.NewMockedHTTPClient(),
+			expectToolError:    true,
+			expectedToolErrMsg: "color",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := githubv4.NewClient(tc.mockedClient)
+			deps := BaseDeps{
+				GQLClient: client,
+			}
+			handler := serverTool.Handler(deps)
+
+			request := createMCPRequest(tc.requestArgs)
+			result, err := handler(ContextWithDeps(context.Background(), deps), &request)
+
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+
+			if tc.expectToolError {
+				assert.True(t, result.IsError)
+				if tc.expectedToolErrMsg != "" {
+					textContent := getErrorResult(t, result)
+					assert.Contains(t, textContent.Text, tc.expectedToolErrMsg)
+				}
+			} else {
+				assert.False(t, result.IsError)
+			}
+		})
+	}
+}
+
+func TestUpdateLabel(t *testing.T) {
+	t.Parallel()
+
+	// Verify tool definition
+	serverTool := UpdateLabel(translations.NullTranslationHelper)
+	tool := serverTool.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "update_label", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "update_label tool should not be read-only")
+
+	tests := []struct {
+		name               string
+		requestArgs        map[string]any
+		mockedClient       *http.Client
+		expectToolError    bool
+		expectedToolErrMsg string
+	}{
+		{
+			name: "successful label update",
+			requestArgs: map[string]any{
+				"owner":    "owner",
+				"repo":     "repo",
+				"name":     "bug",
+				"new_name": "defect",
+				"color":    "ff0000",
+			},
+			mockedClient: githubv4mock.NewMockedHTTPClient(
+				githubv4mock.NewQueryMatcher(
+					struct {
+						Repository struct {
+							Label struct {
+								ID   githubv4.ID
+								Name githubv4.String
+							} `graphql:"label(name: $name)"`
+						} `graphql:"repository(owner: $owner, name: $repo)"`
+					}{},
+					map[string]any{
+						"owner": githubv4.String("owner"),
+						"repo":  githubv4.String("repo"),
+						"name":  githubv4.String("bug"),
+					},
+					githubv4mock.DataResponse(map[string]any{
+						"repository": map[string]any{
+							"label": map[string]any{
+								"id":   githubv4.ID("bug-label-id"),
+								"name": githubv4.String("bug"),
+							},
+						},
+					}),
+				),
+				githubv4mock.NewMutationMatcher(
+					struct {
+						UpdateLabel struct {
+							Label struct {
+								Name githubv4.String
+								ID   githubv4.ID
+							}
+						} `graphql:"updateLabel(input: $input)"`
+					}{},
+					githubv4.UpdateLabelInput{
+						ID:    githubv4.ID("bug-label-id"),
+						Name:  func() *githubv4.String { s := githubv4.String("defect"); return &s }(),
+						Color: func() *githubv4.String { s := githubv4.String("ff0000"); return &s }(),
+					},
+					nil,
+					githubv4mock.DataResponse(map[string]any{
+						"updateLabel": map[string]any{
+							"label": map[string]any{
+								"id":   githubv4.ID("bug-label-id"),
+								"name": githubv4.String("defect"),
+							},
+						},
+					}),
+				),
+			),
+			expectToolError: false,
+		},
+		{
+			name: "update label without any changes",
+			requestArgs: map[string]any{
+				"owner": "owner",
+				"repo":  "repo",
+				"name":  "bug",
+			},
+			mockedClient:       githubv4mock.NewMockedHTTPClient(),
+			expectToolError:    true,
+			expectedToolErrMsg: "at least one of new_name, color, or description must be provided for update",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := githubv4.NewClient(tc.mockedClient)
+			deps := BaseDeps{
+				GQLClient: client,
+			}
+			handler := serverTool.Handler(deps)
+
+			request := createMCPRequest(tc.requestArgs)
+			result, err := handler(ContextWithDeps(context.Background(), deps), &request)
+
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+
+			if tc.expectToolError {
+				assert.True(t, result.IsError)
+				if tc.expectedToolErrMsg != "" {
+					textContent := getErrorResult(t, result)
+					assert.Contains(t, textContent.Text, tc.expectedToolErrMsg)
+				}
+			} else {
+				assert.False(t, result.IsError)
+			}
+		})
+	}
+}
+
+func TestDeleteLabel(t *testing.T) {
+	t.Parallel()
+
+	// Verify tool definition
+	serverTool := DeleteLabel(translations.NullTranslationHelper)
+	tool := serverTool.Tool
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "delete_label", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "delete_label tool should not be read-only")
+
+	tests := []struct {
+		name               string
+		requestArgs        map[string]any
+		mockedClient       *http.Client
+		expectToolError    bool
+		expectedToolErrMsg string
+	}{
+		{
+			name: "successful label deletion",
+			requestArgs: map[string]any{
+				"owner": "owner",
+				"repo":  "repo",
+				"name":  "bug",
+			},
+			mockedClient: githubv4mock.NewMockedHTTPClient(
+				githubv4mock.NewQueryMatcher(
+					struct {
+						Repository struct {
+							Label struct {
+								ID   githubv4.ID
+								Name githubv4.String
+							} `graphql:"label(name: $name)"`
+						} `graphql:"repository(owner: $owner, name: $repo)"`
+					}{},
+					map[string]any{
+						"owner": githubv4.String("owner"),
+						"repo":  githubv4.String("repo"),
+						"name":  githubv4.String("bug"),
+					},
+					githubv4mock.DataResponse(map[string]any{
+						"repository": map[string]any{
+							"label": map[string]any{
+								"id":   githubv4.ID("bug-label-id"),
+								"name": githubv4.String("bug"),
+							},
+						},
+					}),
+				),
+				githubv4mock.NewMutationMatcher(
+					struct {
+						DeleteLabel struct {
+							ClientMutationID githubv4.String
+						} `graphql:"deleteLabel(input: $input)"`
+					}{},
+					githubv4.DeleteLabelInput{
+						ID: githubv4.ID("bug-label-id"),
+					},
+					nil,
+					githubv4mock.DataResponse(map[string]any{
+						"deleteLabel": map[string]any{
+							"clientMutationId": githubv4.String("test-mutation-id"),
 						},
 					}),
 				),

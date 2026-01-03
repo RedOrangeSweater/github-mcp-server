@@ -28,4 +28,7 @@ var DeprecatedToolAliases = map[string]string{
 	"rerun_failed_jobs":              "actions_run_trigger",
 	"cancel_workflow_run":            "actions_run_trigger",
 	"delete_workflow_run_logs":       "actions_run_trigger",
+
+	// Labels tools naming consistency
+	"list_label": "list_labels",
 }

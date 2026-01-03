@@ -1,0 +1,30 @@
+{
+  "annotations": {
+    "destructiveHint": true,
+    "title": "Delete a label from a repository."
+  },
+  "description": "Delete a label from a repository.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Label name to delete."
+      },
+      "owner": {
+        "type": "string",
+        "description": "Repository owner (username or organization name)"
+      },
+      "repo": {
+        "type": "string",
+        "description": "Repository name"
+      }
+    },
+    "required": [
+      "owner",
+      "repo",
+      "name"
+    ]
+  },
+  "name": "delete_label"
+}

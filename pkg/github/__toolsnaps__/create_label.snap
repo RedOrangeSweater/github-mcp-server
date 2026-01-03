@@ -1,0 +1,38 @@
+{
+  "annotations": {
+    "title": "Create a label in a repository."
+  },
+  "description": "Create a label in a repository.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "color": {
+        "type": "string",
+        "description": "Label color as 6-character hex code without '#' prefix (e.g., 'f29513')."
+      },
+      "description": {
+        "type": "string",
+        "description": "Label description text (optional)."
+      },
+      "name": {
+        "type": "string",
+        "description": "Label name."
+      },
+      "owner": {
+        "type": "string",
+        "description": "Repository owner (username or organization name)"
+      },
+      "repo": {
+        "type": "string",
+        "description": "Repository name"
+      }
+    },
+    "required": [
+      "owner",
+      "repo",
+      "name",
+      "color"
+    ]
+  },
+  "name": "create_label"
+}
