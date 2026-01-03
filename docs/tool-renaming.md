@@ -55,6 +55,7 @@ Will get `issue_read` and `get_file_contents` tools registered, with no errors.
 | `get_workflow_run` | `actions_get` |
 | `get_workflow_run_logs` | `actions_get` |
 | `get_workflow_run_usage` | `actions_get` |
+| `list_label` | `list_labels` |
 | `list_workflow_jobs` | `actions_list` |
 | `list_workflow_run_artifacts` | `actions_list` |
 | `list_workflow_runs` | `actions_list` |

@@ -680,6 +680,24 @@ The following sets of tools are available:
 
 <summary><picture><source media="(prefers-color-scheme: dark)" srcset="pkg/octicons/icons/comment-discussion-dark.png"><source media="(prefers-color-scheme: light)" srcset="pkg/octicons/icons/comment-discussion-light.png"><img src="pkg/octicons/icons/comment-discussion-light.png" width="20" height="20" alt="comment-discussion"></picture> Discussions</summary>
 
+- **add_discussion_comment** - Add discussion comment
+  - `body`: Comment body (Markdown) (string, required)
+  - `discussionNumber`: Discussion Number (number, required)
+  - `owner`: Repository owner (string, required)
+  - `reply_to_id`: Optional discussion comment node ID to reply to. (string, optional)
+  - `repo`: Repository name (string, required)
+
+- **create_discussion** - Create discussion
+  - `body`: Discussion body (Markdown) (string, required)
+  - `category_id`: Discussion category node ID. If provided, this is used directly. (string, optional)
+  - `category_name`: Discussion category name. If provided, it will be resolved to a category ID. (string, optional)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+  - `title`: Discussion title (string, required)
+
+- **delete_discussion_comment** - Delete discussion comment
+  - `comment_id`: Discussion comment node ID (string, required)
+
 - **get_discussion** - Get discussion
   - `discussionNumber`: Discussion Number (number, required)
   - `owner`: Repository owner (string, required)
@@ -704,6 +722,19 @@ The following sets of tools are available:
   - `owner`: Repository owner (string, required)
   - `perPage`: Results per page for pagination (min 1, max 100) (number, optional)
   - `repo`: Repository name. If not provided, discussions will be queried at the organisation level. (string, optional)
+
+- **update_discussion** - Update discussion
+  - `body`: New discussion body (optional) (string, optional)
+  - `category_id`: New discussion category node ID (optional). If provided, this is used directly. (string, optional)
+  - `category_name`: New discussion category name (optional). If provided, it will be resolved to a category ID. (string, optional)
+  - `discussionNumber`: Discussion Number (number, required)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+  - `title`: New discussion title (optional) (string, optional)
+
+- **update_discussion_comment** - Update discussion comment
+  - `body`: New comment body (Markdown) (string, required)
+  - `comment_id`: Discussion comment node ID (string, required)
 
 </details>
 
@@ -844,27 +875,10 @@ The following sets of tools are available:
 
 <summary><picture><source media="(prefers-color-scheme: dark)" srcset="pkg/octicons/icons/tag-dark.png"><source media="(prefers-color-scheme: light)" srcset="pkg/octicons/icons/tag-light.png"><img src="pkg/octicons/icons/tag-light.png" width="20" height="20" alt="tag"></picture> Labels</summary>
 
-- **get_label** - Get a specific label from a repository.
-  - `name`: Label name. (string, required)
-  - `owner`: Repository owner (username or organization name) (string, required)
-  - `repo`: Repository name (string, required)
-
-- **list_labels** - List labels from a repository
-  - `owner`: Repository owner (username or organization name) - required for all operations (string, required)
-  - `repo`: Repository name - required for all operations (string, required)
-
 - **create_label** - Create a label in a repository.
   - `color`: Label color as 6-character hex code without '#' prefix (e.g., 'f29513'). (string, required)
   - `description`: Label description text (optional). (string, optional)
   - `name`: Label name. (string, required)
-  - `owner`: Repository owner (username or organization name) (string, required)
-  - `repo`: Repository name (string, required)
-
-- **update_label** - Update a label in a repository.
-  - `color`: Label color as 6-character hex code without '#' prefix (optional). (string, optional)
-  - `description`: Label description text (optional). (string, optional)
-  - `name`: Label name to update. (string, required)
-  - `new_name`: New name for the label (optional). (string, optional)
   - `owner`: Repository owner (username or organization name) (string, required)
   - `repo`: Repository name (string, required)
 
@@ -873,12 +887,29 @@ The following sets of tools are available:
   - `owner`: Repository owner (username or organization name) (string, required)
   - `repo`: Repository name (string, required)
 
-- **label_write** - Perform write operations on repository labels (advanced; supports create/update/delete via `method`).
+- **get_label** - Get a specific label from a repository.
+  - `name`: Label name. (string, required)
+  - `owner`: Repository owner (username or organization name) (string, required)
+  - `repo`: Repository name (string, required)
+
+- **label_write** - Write operations on repository labels.
   - `color`: Label color as 6-character hex code without '#' prefix (e.g., 'f29513'). Required for 'create', optional for 'update'. (string, optional)
   - `description`: Label description text. Optional for 'create' and 'update'. (string, optional)
   - `method`: Operation to perform: 'create', 'update', or 'delete' (string, required)
   - `name`: Label name - required for all operations (string, required)
   - `new_name`: New name for the label (used only with 'update' method to rename) (string, optional)
+  - `owner`: Repository owner (username or organization name) (string, required)
+  - `repo`: Repository name (string, required)
+
+- **list_labels** - List labels from a repository
+  - `owner`: Repository owner (username or organization name) - required for all operations (string, required)
+  - `repo`: Repository name - required for all operations (string, required)
+
+- **update_label** - Update a label in a repository.
+  - `color`: Label color as 6-character hex code without '#' prefix (optional). (string, optional)
+  - `description`: Label description text (optional). (string, optional)
+  - `name`: Label name to update. (string, required)
+  - `new_name`: New name for the label (optional). (string, optional)
   - `owner`: Repository owner (username or organization name) (string, required)
   - `repo`: Repository name (string, required)
 
