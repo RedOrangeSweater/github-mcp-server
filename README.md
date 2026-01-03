@@ -849,7 +849,31 @@ The following sets of tools are available:
   - `owner`: Repository owner (username or organization name) (string, required)
   - `repo`: Repository name (string, required)
 
-- **label_write** - Write operations on repository labels.
+- **list_labels** - List labels from a repository
+  - `owner`: Repository owner (username or organization name) - required for all operations (string, required)
+  - `repo`: Repository name - required for all operations (string, required)
+
+- **create_label** - Create a label in a repository.
+  - `color`: Label color as 6-character hex code without '#' prefix (e.g., 'f29513'). (string, required)
+  - `description`: Label description text (optional). (string, optional)
+  - `name`: Label name. (string, required)
+  - `owner`: Repository owner (username or organization name) (string, required)
+  - `repo`: Repository name (string, required)
+
+- **update_label** - Update a label in a repository.
+  - `color`: Label color as 6-character hex code without '#' prefix (optional). (string, optional)
+  - `description`: Label description text (optional). (string, optional)
+  - `name`: Label name to update. (string, required)
+  - `new_name`: New name for the label (optional). (string, optional)
+  - `owner`: Repository owner (username or organization name) (string, required)
+  - `repo`: Repository name (string, required)
+
+- **delete_label** - Delete a label from a repository.
+  - `name`: Label name to delete. (string, required)
+  - `owner`: Repository owner (username or organization name) (string, required)
+  - `repo`: Repository name (string, required)
+
+- **label_write** - Perform write operations on repository labels (advanced; supports create/update/delete via `method`).
   - `color`: Label color as 6-character hex code without '#' prefix (e.g., 'f29513'). Required for 'create', optional for 'update'. (string, optional)
   - `description`: Label description text. Optional for 'create' and 'update'. (string, optional)
   - `method`: Operation to perform: 'create', 'update', or 'delete' (string, required)
@@ -857,10 +881,6 @@ The following sets of tools are available:
   - `new_name`: New name for the label (used only with 'update' method to rename) (string, optional)
   - `owner`: Repository owner (username or organization name) (string, required)
   - `repo`: Repository name (string, required)
-
-- **list_label** - List labels from a repository
-  - `owner`: Repository owner (username or organization name) - required for all operations (string, required)
-  - `repo`: Repository name - required for all operations (string, required)
 
 </details>
 
